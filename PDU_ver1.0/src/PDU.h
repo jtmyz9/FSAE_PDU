@@ -31,6 +31,7 @@ typedef struct output_data{
 	uint8_t current;
 	uint8_t state;
 	uint8_t last_curr;
+	uint32_t inrush_delay;
 }output_data_t;
 
 #ifndef PDU_ENABLE_PORT
@@ -130,29 +131,8 @@ void soft_restart(void);
 void init_PDU(void);
 
 void handle_CAN(can_mb_conf_t *mailbox);
-
 void PDU_transmit_callback(void);
 void ECU_timeout_callback(void);
-
-/**
- * \brief Reset mailbox configure structure.
- *
- *  \param p_mailbox Pointer to mailbox configure structure.
- */
-static void reset_mailbox_conf(can_mb_conf_t *p_mailbox)
-{
-	p_mailbox->ul_mb_idx = 0;
-	p_mailbox->uc_obj_type = 0;
-	p_mailbox->uc_id_ver = 0;
-	p_mailbox->uc_length = 0;
-	p_mailbox->uc_tx_prio = 0;
-	p_mailbox->ul_status = 0;
-	p_mailbox->ul_id_msk = 0;
-	p_mailbox->ul_id = 0;
-	p_mailbox->ul_fid = 0;
-	p_mailbox->ul_datal = 0;
-	p_mailbox->ul_datah = 0;
-}
 
 
 

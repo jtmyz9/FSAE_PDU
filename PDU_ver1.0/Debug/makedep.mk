@@ -6,6 +6,8 @@ src\ASF\sam\drivers\can\can.c
 
 src\ASF\sam\drivers\tc\tc.c
 
+src\CAN\can_routines.c
+
 src\PDU.c
 
 src\ASF\common\services\delay\sam\cycle_counter.c

@@ -544,6 +544,7 @@
     <Folder Include="src\ASF\thirdparty\CMSIS\Lib\" />
     <Folder Include="src\ASF\thirdparty\CMSIS\Lib\GCC\" />
     <Folder Include="src\config\" />
+    <Folder Include="src\CAN" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\ASF\sam\drivers\can\can.c">
@@ -558,6 +559,12 @@
     <None Include="src\ASF\sam\drivers\tc\tc.h">
       <SubType>compile</SubType>
     </None>
+    <Compile Include="src\CAN\can_routines.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\CAN\PDU_CAN_conf.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\config\conf_board.h">
       <SubType>compile</SubType>
     </Compile>

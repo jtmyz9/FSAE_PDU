@@ -10,6 +10,7 @@
 #define CONF_PDU_H_
 
 #include <asf.h>	
+#include "../CAN/PDU_CAN_conf.h"
 
 /*
 * Bit position for individual enable channels
@@ -40,7 +41,6 @@ typedef enum enable_index	{
  */	
 #define MAX_PDU_CHANNEL 32
 
-//Assert((NUM_PDU_CHANNEL < MAX_PDU_CHANNEL));
 
 /*
 * IOPORT Definitions for PDU enables
@@ -74,12 +74,12 @@ typedef enum enable_index	{
 * max current we expect a device to pull during normal operation
 * NOTE: These are listed as the ceiling of what we expect
 */
-#define FAN_IS_MAX				25 
+#define FAN_IS_MAX				26
 #define IGNITION_IS_MAX			10
 #define PUMP_IS_MAX				15
-#define ECU_IS_MAX				10
+#define ECU_IS_MAX				12
 #define BRAKE_IS_MAX			2
-#define HORN_IS_MAX				13
+#define HORN_IS_MAX				6
 #define DATA_IS_MAX				6
 #define GEN_5V__IS_MAX			3
 #define GEN_12V_IS_MAX			5
@@ -132,7 +132,7 @@ static const enum afec_channel_num PDU_AFEC_channel_list[NUM_PDU_CHANNEL] = {
 	HORN_IS_CH,	
 	DATA_IS_CH,	
 	GEN_5V__IS_CH,	
-	 GEN_12V_IS_CH,	
+	GEN_12V_IS_CH,	
 	AUX2_IS_CH	
 	};
 	
@@ -145,7 +145,7 @@ static const enum afec_channel_num PDU_AFEC_channel_list[NUM_PDU_CHANNEL] = {
 */
 static const uint32_t PDU_AFEC_channel_offset[NUM_PDU_CHANNEL] = {
 	715,720,730,740,690,660,660,850,710,630								//why the fuck didnt i make these mV instead raw ADC vals????
-	};
+	}; //this shit is why I should have put NVSRAM on board
 	
 #define AFEC_conversion_factor				3300UL / (4095UL * 16)			//conversion factor for afec result to mV
 #define PDU_SENSE_MV_TO_MA					220							//this is value of resistor transforming current feedback into voltage
@@ -153,6 +153,11 @@ static const uint32_t PDU_AFEC_channel_offset[NUM_PDU_CHANNEL] = {
 #define SCALE_FACTOR						10							//factor to multiple Amperage value by before stuffing into uint8 val
 #define IS_FAULT_MIN						1320						//min number of mV that indicates fault condition
 #define PDU_OVERTEMP						75							//75C, considering this value as too high of a temperature for the pdu to continue operation
+
+#define INRUSH_AFEC_DELAY					20						//number of samples to delay fuse tripping by, to ride through inrush currents
+#define PRECHARGE_ATTEMPTS					10							//number of times to cycle powerfet to charge capacitors on bus
+#define PRECHARGE_TIME						50							//ms to leave bus energized to attempt precharge
+#define EFUSE_LATCH_RELEASE_T				85							//ms to release short circuit/fault latch
 
 /************************************************************************/
 /* Channel Status Codes                                                 */
@@ -166,108 +171,7 @@ typedef enum {
 }status_code;
 	
 	
-/************************************************************************/
-/*           CAN BUS Definitions for PDU                                */
-/************************************************************************/
-#define PDU_CAN_SEL							0				//select CAN0 or CAN1 for preprocessor statements involving which can bus
-#define PDU_CAN								CAN0
-#define PDU_CAN_BAUD						CAN_BPS_1000K
-#define PDU_CAN_DIAGNOSTIC_DELAY			50				//number of millisec until ECU can timeout
-/*
- *	this is slightly higher than warning limit but below error passive limit for tx error cnt
- *	This makes it so that we don't keep waiting for a message to transmit
- *	in loops where we need contents of mailbox x to transmit before loading with next message
- */
-#define PDU_CAN_TX_ERROR_CNT				100				
 
-typedef enum{
-	standard,
-	extended
-	}CAN_BUS_ID_TYPE;
-
-/** CAN Bus Addresses */
-#define PDU_ADDRES_TYPE						standard
-#define PDU_ECU_REC_ADDRESS					0x11A			//this is hard coded into ECU
-#define PDU_ECU_ENG_DATA_ADD				0x118
-#define PDU_ECU_VEHICLE_DATA_ADD			0x119
-#define PDU_BASE_TX_ADDRESS					0x500			//configured in ECU software
-
-
-/** Specific definitions for CAN receive                                */
-#define PDU_RECEIVE_MB						2
-#define PDU_CAN_RECEIVE_IE_MASK				(CAN_IER_MB1 | CAN_IER_MB0)			//mask for interrupts to enable
-#define PDU_ECU_GEN_MSG_ID_MASK				CAN_MAM_MIDvA_Msk - 1;
-
-
-#define	PDU_ALL_ERR_MASK					(CAN_SR_CERR | CAN_SR_SERR | CAN_SR_AERR |CAN_SR_FERR | CAN_SR_BERR)
-#define PDU_CAN_IE_MASK						(PDU_CAN_RECEIVE_IE_MASK | CAN_IER_BOFF)
-
-/** Definitions for CAN TX												*/
-#define PDU_TX_MB							5
-#define PDU_TX_STATUS_CNT					3
-
-#define PDU_TX_FIRST_MB						2
-
-#define PDU_STATUS_TX_MB					PDU_TX_FIRST_MB
-#define PDU_OUTPUT_TX_MB					PDU_TX_FIRST_MB + 4
-#define PDU_AMP_TX_MB						PDU_TX_FIRST_MB + 1
-/** TODO: MAke this less hardcoded: find way to build this mask bases on how many TX messags */
-#define PDU_TX_MB_MASK						( CAN_TCR_MB3 | CAN_TCR_MB4 | CAN_TCR_MB5 | CAN_TCR_MB6 | CAN_TCR_MB7 )
-
-/*
-* "Magic Numbers" for CAN data
-* These are constant values used when encoding/decoding ECU can messages
-* Some values are scales, others are for unit conversions
-*/
-
-#define ECU_RPM_SCALE						600
-
-
-/*
-* Values to be or'd with Byte 0 to set compound ID
-* Detailed in Excel sheet
-*/
-typedef enum{
-	state_zero,
-	state_one		= 1 << 4,
-	state_two		= 2 << 4,
-	state_three		= 3 << 4
-	}PDU_state_compound_id;
-	
-static const PDU_state_compound_id state_id[PDU_TX_MB]= {
-	state_zero,
-	state_one,
-	state_two,
-	state_three
-};
-	
-typedef enum{
-	output_zero,
-	output_one		= 1 << 6,
-	output_two		= 2 << 6,
-	output_three	= 3 << 6
-}PDU_output_compound_id;
-
-
-/** CAN frame max data length: helpful def */
-#define MAX_CAN_FRAME_DATA_LEN				8
-
-//Alias for CAN0_Handler for PDU
-#define	ECU_RECEIVE							CAN0_Handler
-
-typedef enum{
-	no_receive, 
-	rx_good,
-	rx_timeout,
-	rx_fault
-	}can_receive_status;
-	
-typedef enum{
-	tx_request,
-	tx_good,
-	tx_timeout,
-	tx_fault
-}can_transmit_status;
 
 
 /************************************************************************/

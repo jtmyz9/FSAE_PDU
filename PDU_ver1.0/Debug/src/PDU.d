@@ -143,7 +143,8 @@ src/PDU.d src/PDU.o: ../src/PDU.c ../src/PDU.h ../src/asf.h \
  ../src/ASF/common/services/sleepmgr/sleepmgr.h \
  ../src/ASF/common/services/sleepmgr/sam/sleepmgr.h \
  ../src/ASF/sam/drivers/tc/tc.h ../src/ASF/sam/drivers/uart/uart.h \
- ../src/ASF/sam/drivers/wdt/wdt.h ../src/config/conf_PDU.h
+ ../src/ASF/sam/drivers/wdt/wdt.h ../src/config/conf_PDU.h \
+ ../src/config/../CAN/PDU_CAN_conf.h
 
 ../src/PDU.h:
 
@@ -454,3 +455,5 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\arm\arm-gnu-toolchain\arm-no
 ../src/ASF/sam/drivers/wdt/wdt.h:
 
 ../src/config/conf_PDU.h:
+
+../src/config/../CAN/PDU_CAN_conf.h:

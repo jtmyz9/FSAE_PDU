@@ -33,6 +33,7 @@ void init_PDU(void){
 	enable_mask = PDU_DEFAULT_MASK;
 	set_enable(enable_mask, PDU_ON_STATE);
 	// Bang-Bang Precharge for insane capacitance on ECU bus, this is really dumb, i hate myself
+	// I should learn to include snubber networks in pcb
 	for(unsigned int i =0; i < PRECHARGE_ATTEMPTS; i++){
 		set_enable((1<<ECU_MASK), PDU_OFF_STATE);
 		delay_ms(EFUSE_LATCH_RELEASE_T);
@@ -206,7 +207,7 @@ void update_output_status(){
 		* This check throws out the first n samples to avoid tripping on inrush current events
 		* We have to divide the stored current value by scale factor to get real amps for comparison 
 		*/
-		else if ( ( outputs[i].current / SCALE_FACTOR ) > curr_limits[i] && outputs[i].inrush_delay > INRUSH_AFEC_DELAY)
+		else if ( ( outputs[i].current / SCALE_FACTOR ) >= curr_limits[i] && outputs[i].inrush_delay > INRUSH_AFEC_DELAY)
 		{	
 			outputs[i].current = 0;
 			outputs[i].state = CHANNEL_OVER_CURRENT;
@@ -221,17 +222,17 @@ void update_output_status(){
 		
 		if( Tst_bits( enable_mask, (1<<i) ) ){
 			outputs[i].state = CHANNEL_ON;
-			outputs[i].inrush_delay++;									
+			outputs[i].inrush_delay++;
+									
 			outputs[i].last_curr = outputs[i].current;
-		 	
+		 	outputs[i].current = get_is(IS_AFEC, PDU_AFEC_channel_list[i], PDU_AFEC_channel_offset[i]);	
 		}	
 		else {
 			 outputs[i].state = CHANNEL_OFF;
-			 //outputs[i].current = 0;
+			 outputs[i].current = 0;
 			 outputs[i].inrush_delay = 0;
 		}
 		
-		outputs[i].current = get_is(IS_AFEC, PDU_AFEC_channel_list[i], PDU_AFEC_channel_offset[i]);
 		loc_total += (outputs[i].current/ SCALE_FACTOR );
 	}
 		
@@ -273,7 +274,7 @@ uint8_t get_is( Afec *const afec ,enum afec_channel_num pdu_channel, uint32_t of
 	conversion_result = conversion_result * PDU_FET_DIFFERENTIAL_RATIO;
 	conversion_result = conversion_result * SCALE_FACTOR;
 	
-	//if the converted amperage is 0 or negative due to not perfect offset calibration
+	//if the converted amperage is 0 or negative due to imperfect offset calibration
 	if( conversion_result < 1 ) return 0;
 	
 	/*
@@ -307,20 +308,26 @@ void get_chip_temp(void){
 
 void soft_restart(void)
 {
+	//I hate this, disabling interrupts here pretty much throws out the window any predictability in the system
+	// ie, this has the ability to timeout transmissions to ECU and there is no transparent indication of when or if this can happen
+	// probably solvable with reasonable thread management in an RTOS
 	__disable_irq();
-	ioport_set_port_level(PDU_ENABLE_PORT, (error_mask & CONF_SOFT_RESTART_MASK), PDU_OFF_STATE );	
+	set_enable((error_mask & CONF_SOFT_RESTART_MASK), PDU_ON_STATE);
+	//ioport_set_port_level(PDU_ENABLE_PORT, (error_mask & CONF_SOFT_RESTART_MASK), PDU_OFF_STATE );	
 	/*
 	 *	Delay to allow latch in powerfet to reset
 	 *	The latch reset time is specified in Table 6 of BTS50060 datasheet
 	 *	The Typical reset time is ~50ms but the maximum is 80ms, so we will 
 	 *	wait for 85ms to ensure wait is long enough
 	 */
-	delay_ms(85);
-	ioport_set_port_level(PDU_ENABLE_PORT, (error_mask & CONF_SOFT_RESTART_MASK), PDU_ON_STATE  );
+	delay_ms(EFUSE_LATCH_RELEASE_T);
+	set_enable((error_mask & CONF_SOFT_RESTART_MASK), PDU_ON_STATE);
+	//ioport_set_port_level(PDU_ENABLE_PORT, (error_mask & CONF_SOFT_RESTART_MASK), PDU_ON_STATE  );
 	//reset the mask, after all channels have been "restarted"
 	//why did i do this like this?
 	error_mask &= ~(error_mask & CONF_SOFT_RESTART_MASK);
 	__enable_irq();
+	//Internal ARM command to return to highest priority interrupt
 	__ISB();
 }
 
@@ -336,9 +343,6 @@ void soft_restart(void)
 * TODO: Build constant array of IDs with function pointers for handling different messages
 */
 void handle_CAN(can_mb_conf_t *mailbox){
-	Union64 payload;
-	payload.u32[0] = mailbox->ul_datal;
-	payload.u32[1] = mailbox->ul_datah;
 	
 	switch(mailbox->ul_id){
 		case CAN_MID_MIDvA(PDU_ECU_REC_ADDRESS) :
@@ -506,15 +510,15 @@ void PDU_transmit_callback(void){
 	can_mailbox[PDU_OUTPUT_TX_MB].uc_length = MAX_CAN_FRAME_DATA_LEN;
 	for ( int index = 0; index < NUM_PDU_CHANNEL / 7 + 1; index++)
 	{
-		LSB0W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 0].state | PDU_status_id[index];
-		LSB1W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 1].state;
-		LSB2W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 2].state;
-		LSB3W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 3].state;
+		LSB0W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = index;
+		LSB1W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 0].state;
+		LSB2W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 1].state;
+		LSB3W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datal) = outputs[ (index * 8) + 2].state;
 
-		LSB0W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 4].state;
-		LSB1W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 5].state;
-		LSB2W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 6].state;
-		LSB3W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 7].state;
+		LSB0W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 3].state;
+		LSB1W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 4].state;
+		LSB2W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 5].state;
+		LSB3W(can_mailbox[PDU_OUTPUT_TX_MB].ul_datah) = outputs[ (index * 8) + 6].state;
 		
 		can_mailbox_write(PDU_CAN, &can_mailbox[PDU_OUTPUT_TX_MB]);
 		can_mailbox_send_transfer_cmd(PDU_CAN, &can_mailbox[PDU_OUTPUT_TX_MB]);
@@ -538,13 +542,14 @@ void PDU_transmit_callback(void){
 	for ( int index = 0; index < NUM_PDU_CHANNEL / 7 + 1; index++)
 	{
 		LSB0W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = index;
-		LSB1W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 7) + 0].current;
-		LSB2W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 7) + 1].current;
-		LSB3W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 7) + 2].current;
-		LSB0W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 7) + 3].current;
-		LSB1W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 7) + 4].current;
-		LSB2W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 7) + 5].current;
-		LSB3W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 7) + 6].current;
+		LSB1W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 8) + 0].current;
+		LSB2W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 8) + 1].current;
+		LSB3W(can_mailbox[PDU_AMP_TX_MB].ul_datal) = outputs[ (index * 8) + 2].current;
+
+		LSB0W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 8) + 3].current;
+		LSB1W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 8) + 4].current;
+		LSB2W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 8) + 5].current;
+		LSB3W(can_mailbox[PDU_AMP_TX_MB].ul_datah) = outputs[ (index * 8) + 6].current;
 		
 		can_mailbox_write(PDU_CAN, &can_mailbox[PDU_AMP_TX_MB]);
 		can_mailbox_send_transfer_cmd(PDU_CAN, &can_mailbox[PDU_AMP_TX_MB]);
