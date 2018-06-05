@@ -150,11 +150,12 @@ static const uint32_t PDU_AFEC_channel_offset[NUM_PDU_CHANNEL] = {
 #define AFEC_conversion_factor				3300UL / (4095UL * 16)			//conversion factor for afec result to mV
 #define PDU_SENSE_MV_TO_MA					220							//this is value of resistor transforming current feedback into voltage
 #define PDU_FET_DIFFERENTIAL_RATIO			13							//define in BTS50060 Datasheet	
-#define SCALE_FACTOR						10							//factor to multiple Amperage value by before stuffing into uint8 val
+#define SCALE_FACTOR						5							//factor to multiple Amperage value by before stuffing into uint8 val
 #define IS_FAULT_MIN						1320						//min number of mV that indicates fault condition
 #define PDU_OVERTEMP						75							//75C, considering this value as too high of a temperature for the pdu to continue operation
 
-#define INRUSH_AFEC_DELAY					20						//number of samples to delay fuse tripping by, to ride through inrush currents
+#define INRUSH_AFEC_DELAY					20							//number of samples to delay fuse tripping by, to ride through inrush currents
+#define OVERCURRENT_REJECTION_DELAY			5							//number of quantum that channel should be overcurrent before tripping fault
 #define PRECHARGE_ATTEMPTS					10							//number of times to cycle powerfet to charge capacitors on bus
 #define PRECHARGE_TIME						50							//ms to leave bus energized to attempt precharge
 #define EFUSE_LATCH_RELEASE_T				85							//ms to release short circuit/fault latch

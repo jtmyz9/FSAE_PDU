@@ -87,6 +87,7 @@ int main (void)
 		
 		if( update_outputs ){ 
 			update_output_status();
+			update_fault_states();
 			update_outputs = false;
 		}
 		

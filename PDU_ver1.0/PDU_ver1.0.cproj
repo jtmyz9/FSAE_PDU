@@ -208,7 +208,7 @@
         <documentation help="http://asf.atmel.com/docs/3.35.1/common.applications.user_application.user_board.sam4e8e/html/index.html" />
         <offline-documentation help="" />
         <dependencies>
-          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.26.0" />
+          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.28.1" />
         </dependencies>
         <project id="common.applications.user_application.user_board.sam4e8e" value="Add" config="" content-id="Atmel.ASF" />
         <board id="board.user_board.sam4e" value="Add" config="" content-id="Atmel.ASF" />
@@ -228,8 +228,7 @@
       <ToolNumber>J41800086101</ToolNumber>
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
-    <avrtoolinterface>
-    </avrtoolinterface>
+    <avrtoolinterface>JTAG</avrtoolinterface>
     <avrtoolinterfaceclock>7500000</avrtoolinterfaceclock>
     <custom>
       <ToolOptions xmlns="">

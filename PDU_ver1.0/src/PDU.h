@@ -32,6 +32,7 @@ typedef struct output_data{
 	uint8_t state;
 	uint8_t last_curr;
 	uint32_t inrush_delay;
+	uint32_t overcurrent_time;
 }output_data_t;
 
 #ifndef PDU_ENABLE_PORT
@@ -112,6 +113,7 @@ uint8_t get_is( Afec *const afec ,enum afec_channel_num pdu_channel, uint32_t of
 
 
 void update_output_status(void);
+void update_fault_states(void);
 
 void get_chip_temp(void);
 

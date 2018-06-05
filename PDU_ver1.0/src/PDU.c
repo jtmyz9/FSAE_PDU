@@ -190,37 +190,11 @@ void update_output_status(){
 	//start the AFEC conversions for all enabled outputs
 	afec_start_software_conversion(IS_AFEC);
 	uint8_t loc_total = 0;
-	bool	sys_error = false;
+
 	for(uint8_t i = 0; i < NUM_PDU_CHANNEL; i++){		
 		
-		//if the channel is actually in faulty state
-		if( outputs[i].current == UINT8_MAX ){
-			outputs[i].current = 0;
-			outputs[i].state = CHANNEL_FAULT;
-			//attempt to soft restart channel and assess on next run through
-			error_mask |= (1<<i);
-			sys_error = true;
-		}
-		/*
-		* Check if the channel is in an over current state
-		* This check throws out the first n samples to avoid tripping on inrush current events
-		* We have to divide the stored current value by scale factor to get real amps for comparison 
-		*/
-		else if ( ( outputs[i].current / SCALE_FACTOR ) > curr_limits[i] && outputs[i].inrush_delay > INRUSH_AFEC_DELAY)
-		{	
-			outputs[i].current = 0;
-			outputs[i].state = CHANNEL_OVER_CURRENT;
-			//set_enable((1<<i), PDU_OFF_STATE );
-			//attempt to soft restart channel and assess on next run through
-			error_mask |= (1<<i);
-			sys_error = true;
-		}
-		else{				
-			//error_mask &= ~(1<<i);
-			}		
-		
 		if( Tst_bits( enable_mask, (1<<i) ) ){
-			outputs[i].state = CHANNEL_ON;
+			if (outputs[i].state == CHANNEL_OFF)	outputs[i].state = CHANNEL_ON;
 			outputs[i].inrush_delay++;									
 			outputs[i].last_curr = outputs[i].current;
 		 	
@@ -236,8 +210,61 @@ void update_output_status(){
 	}
 		
 	PDU.total_curr = loc_total;
-	PDU.error_flag = sys_error;
+	
 
+}
+
+/*
+* Update fault states 
+* Calculate the new "fault" states of all channels
+* Updates the error mask containing bitmask of channels in error states
+*/
+void update_fault_states(){
+	
+	bool sys_error = false;
+	
+	for(int i = 0; i < NUM_PDU_CHANNEL; i++){
+		static uint32_t fault_threshold  = IS_FAULT_MIN					// IS min is mV threshold for fault, defined in Fet datasheet
+								* PDU_FET_DIFFERENTIAL_RATIO	// Should I just do this in header?
+								* SCALE_FACTOR;
+								
+		//if the channel is actually in faulty state
+		if( outputs[i].current > fault_threshold ){
+			//outputs[i].current = 0;
+			outputs[i].state = CHANNEL_FAULT;
+			//attempt to soft restart channel and assess on next run through
+			//error_mask |= (1<<i);
+			sys_error = true;
+		}
+		/*
+		* Check if the channel is in an over current state
+		* This check throws out the first n samples to avoid tripping on inrush current events
+		* We have to divide the stored current value by scale factor to get real amps for comparison 
+		*/
+		else if ( ( outputs[i].current / SCALE_FACTOR ) > curr_limits[i] && outputs[i].inrush_delay > INRUSH_AFEC_DELAY)
+		{	
+			
+			outputs[i].overcurrent_time++;
+			//set_enable((1<<i), PDU_OFF_STATE );
+			//attempt to soft restart channel and assess on next run through
+			//error_mask |= (1<<i);
+			if (outputs[i].overcurrent_time > OVERCURRENT_REJECTION_DELAY){
+				outputs[i].state = CHANNEL_OVER_CURRENT;
+				sys_error = true;
+			}
+			
+		}
+		/*
+		* If channel is not faulted clear over current time and system error to false
+		*/
+		else{				
+			//error_mask &= ~(1<<i);
+			outputs->overcurrent_time = 0;
+			sys_error = false;
+			}		
+	}
+	
+	PDU.error_flag = sys_error;
 }
 
 /*
@@ -264,7 +291,7 @@ uint8_t get_is( Afec *const afec ,enum afec_channel_num pdu_channel, uint32_t of
 	 *	If the converted amperage is at the minimun value for fault 
 	 *  indication, this is either a short circuit event or fet is over temp
 	 */
-	if ( conversion_result > IS_FAULT_MIN) return UINT8_MAX;
+	//if ( conversion_result > IS_FAULT_MIN) return UINT8_MAX; // should change this behaviour because this could also be a valid returned value after value is scaled
 	
 	//transform into number of mA
 	conversion_result = conversion_result / PDU_SENSE_MV_TO_MA;
@@ -343,7 +370,7 @@ void handle_CAN(can_mb_conf_t *mailbox){
 	switch(mailbox->ul_id){
 		case CAN_MID_MIDvA(PDU_ECU_REC_ADDRESS) :
 		
-			enable_mask = ((mailbox->ul_datal)  | PDU_NON_ENGINE_MASK) & ~error_mask;
+			enable_mask = ((mailbox->ul_datal)  | PDU_NON_ENGINE_MASK) ;//& ~error_mask;
 			g_recv_timeout_cnt = 0;
 			set_enable(enable_mask, PDU_ON_STATE);
 			//do this to ensure off request are serviced
